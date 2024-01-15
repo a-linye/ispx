@@ -11,7 +11,7 @@ import (
 
 	"github.com/goplus/igop"
 	"github.com/goplus/igop/gopbuild"
-	"github.com/goplus/ispx/github"
+	"github.com/goplus/ispx/fsobj"
 	"github.com/goplus/spx"
 
 	_ "github.com/goplus/igop/pkg/fmt"
@@ -65,12 +65,12 @@ func main() {
 		data []byte
 		err  error
 	)
-	if root, ok := github.IsSupport(path); ok {
+	if root, ok := fsobj.IsSupport(path); ok {
 		if flagVerbose {
-			github.Verbose = true
+			fsobj.Verbose = true
 		}
-		client := github.NewClient(flagGithubToken)
-		fs, err := github.NewFileSystem(client, root)
+		client := fsobj.NewClient(flagGithubToken)
+		fs, err := fsobj.NewFileSystem(client, root)
 		if err != nil {
 			log.Fatalln("error", err)
 		}
@@ -83,7 +83,7 @@ func main() {
 		}
 		igop.RegisterExternal("github.com/goplus/spx.Gopt_Game_Run", func(game spx.Gamer, resource interface{}, gameConf ...*spx.Config) {
 			assert := root + "/" + resource.(string)
-			fs, err := github.NewDir(client, assert)
+			fs, err := fsobj.NewDir(client, assert)
 			if err != nil {
 				log.Panicln(err)
 			}

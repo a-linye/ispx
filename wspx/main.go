@@ -10,9 +10,10 @@ import (
 	"path/filepath"
 	"syscall/js"
 
+	"github.com/goplus/ispx/fsobj"
+
 	"github.com/goplus/igop"
 	"github.com/goplus/igop/gopbuild"
-	"github.com/goplus/ispx/github"
 	"github.com/goplus/spx"
 
 	_ "github.com/goplus/igop/pkg/fmt"
@@ -47,7 +48,9 @@ func main() {
 	flagVerbose = true
 	global := js.Global().Get("top")
 	path := global.Get("spxurl").String()
+	rootDir := global.Get("rootDir").String()
 	flagGithubToken = global.Get("token").String()
+	shouldCompile := global.Get("shouldCompile").Bool()
 	if flagVerbose {
 		log.Println("load url", path)
 	}
@@ -66,47 +69,70 @@ func main() {
 		data []byte
 		err  error
 	)
-	if root, ok := github.IsSupport(path); ok {
-		if flagVerbose {
-			github.Verbose = true
-		}
-		client := github.NewClient(flagGithubToken)
-		fs, err := github.NewFileSystem(client, root)
+
+	if shouldCompile {
+		fs, err := fsobj.NewIndexDBFs(rootDir)
 		if err != nil {
 			log.Fatalln("error", err)
 		}
-		if flagVerbose {
-			log.Println("BuildDir", root)
-		}
-		data, err = gopbuild.BuildFSDir(ctx, fs, root)
+		data, err = gopbuild.BuildFSDir(ctx, fs, rootDir)
 		if err != nil {
-			log.Panicln(err)
+			log.Fatalln("buildFSDir err:", err)
 		}
 		igop.RegisterExternal("github.com/goplus/spx.Gopt_Game_Run", func(game spx.Gamer, resource interface{}, gameConf ...*spx.Config) {
-			assert := root + "/" + resource.(string)
-			fs, err := github.NewDir(client, assert)
+			assert := rootDir + "/" + resource.(string)
+			log.Println("assert:", rootDir)
+			fs, err := fsobj.NewIndexDBDir(assert)
 			if err != nil {
 				log.Panicln(err)
 			}
 			spx.Gopt_Game_Run(game, fs, gameConf...)
 		})
 	} else {
-		if flagVerbose {
-			log.Println("BuildDir", path)
-		}
-		data, err = gopbuild.BuildDir(ctx, path)
-		if err != nil {
-			log.Panicln(err)
-		}
-		if !filepath.IsAbs(path) {
-			dir, _ := os.Getwd()
-			path = filepath.Join(dir, path)
-		}
-		os.Chdir(path)
-		if flagVerbose {
-			log.Println("Chdir", path)
+		if root, ok := fsobj.IsSupport(path); ok {
+			if flagVerbose {
+				fsobj.Verbose = true
+			}
+			client := fsobj.NewClient(flagGithubToken)
+			fs, err := fsobj.NewFileSystem(client, root)
+			if err != nil {
+				log.Fatalln("error", err)
+			}
+			if flagVerbose {
+				log.Println("BuildDir", root)
+			}
+			data, err = gopbuild.BuildFSDir(ctx, fs, root)
+			if err != nil {
+				log.Panicln(err)
+			}
+			igop.RegisterExternal("github.com/goplus/spx.Gopt_Game_Run", func(game spx.Gamer, resource interface{}, gameConf ...*spx.Config) {
+				assert := root + "/" + resource.(string)
+				log.Println("assert", assert)
+				fs, err := fsobj.NewDir(client, assert)
+				if err != nil {
+					log.Panicln(err)
+				}
+				spx.Gopt_Game_Run(game, fs, gameConf...)
+			})
+		} else {
+			if flagVerbose {
+				log.Println("BuildDir", path)
+			}
+			data, err = gopbuild.BuildDir(ctx, path)
+			if err != nil {
+				log.Panicln(err)
+			}
+			if !filepath.IsAbs(path) {
+				dir, _ := os.Getwd()
+				path = filepath.Join(dir, path)
+			}
+			os.Chdir(path)
+			if flagVerbose {
+				log.Println("Chdir", path)
+			}
 		}
 	}
+
 	if flagDumpSrc {
 		fmt.Println(string(data))
 	}

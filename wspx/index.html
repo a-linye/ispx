@@ -6,15 +6,81 @@
 
 <body>
 github token:
-<input style="width:50%" id="token" name="token" type="password" value=""/>
+<input style="width:50%" id="token" name="token" type="password" value="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"/>
 </p>
 input spx url:
-<input style="width:50%" id="spxurl" name="spxurl" type="text" value="https://github.com/goplus/FlappyCalf"/>
-<input type="button" value="Load" onclick="loadUrl();" />
+<input style="width:50%" id="spxurl" name="spxurl" type="text" value="https://github.com/a-linye/hello"/>
+<input type="button" value="Load & Compile from github" onclick="loadUrl();" />
+
+</p>
+save spx project to indexedDB:
+<input type="button" value="Save to IndexedDB" onclick="startSavingProcess();" />
+
+<p>
+compile
+<p>
+Enter Project Root Directory:
+<input type="text" id="rootDir" name="rootDir" style="width:50%;" placeholder="Enter root directory",value="hello" />
+</p>
+load data from indexedDB and compile:
+<textarea id="dirStructure" name="dirStructure" style="width:50%; height:100px;">
+    [
+    {
+        "name": "main.gmx",
+        "isDir": false
+    },
+    {
+        "name": "gop_autogen.go",
+        "isDir": false
+    },
+    {
+        "name": "Calf.spx",
+        "isDir": false
+    },
+    {
+        "name": "assets",
+        "isDir": true,
+        "children": [
+            {
+                "name": "sprites",
+                "isDir": true,
+                "children": [
+                    {
+                        "name": "Calf",
+                        "isDir": true,
+                        "children": [
+                            {
+                                "name": "1.png",
+                                "isDir": false
+                            },
+                            {
+                                "name": "index.json",
+                                "isDir": false
+                            }
+                        ]
+                    }
+                ]
+            },
+            {
+                "name": "index.json",
+                "isDir": false
+            }
+        ]
+    }
+]
+</textarea>
+<input type="button" value="compile" onclick="compile();" />
+</p>
+
 <script>
+var shouldCompile = false;
 function loadUrl(){
+    shouldCompile = false;
     window.token = document.getElementById("token").value;
     window.spxurl = document.getElementById("spxurl").value;
+    window.rootDir = document.getElementById("rootDir").value;
+    window.dirJSON = document.getElementById("dirStructure").value;
+
     var iframe = document.getElementById("iframe");
     if (iframe) {
        destroyIframe(iframe);
@@ -30,6 +96,28 @@ function loadUrl(){
     // 将 <iframe> 添加到页面中的某个容器元素内（比如 body）
     document.body.appendChild(iframe);
 }
+
+
+function compile(){
+    shouldCompile = true;
+    window.rootDir = document.getElementById("rootDir").value;
+
+    var iframe = document.getElementById("iframe");
+    if (iframe) {
+       destroyIframe(iframe);
+    }   
+    iframe = document.createElement('iframe');
+    // 设置 <iframe> 属性
+    iframe.src = 'main.html'; // 指定要显示的网址
+    iframe.width = '640px'; // 设置宽度
+    iframe.height = '480px'; // 设置高度
+    iframe.id = "iframe";
+    iframe.onload = function() {
+    }
+    // 将 <iframe> 添加到页面中的某个容器元素内（比如 body）
+    document.body.appendChild(iframe);
+}
+
 function destroyIframe(iframe){
   iframe.src = 'about:blank';
   try{
@@ -37,6 +125,132 @@ function destroyIframe(iframe){
     iframe.contentWindow.document.clear();
   }catch(e){}
   iframe.parentNode.removeChild(iframe);
+}
+function getIndexedDB() {
+            var request = window.indexedDB.open("SPXDatabase", 1);
+
+            request.onupgradeneeded = function(event) {
+                var db = event.target.result;
+                if (!db.objectStoreNames.contains("files")) {
+                    db.createObjectStore("files");
+                }
+            };
+
+            return new Promise((resolve, reject) => {
+                request.onerror = function(event) {
+                    reject("Error opening indexedDB: " + event.target.errorCode);
+                };
+
+                request.onsuccess = function(event) {
+                    resolve(event.target.result);
+                };
+            });
+}
+
+function startSavingProcess() {
+            // 获取用户输入的仓库 URL 和 token
+            let repoUrl = document.getElementById('spxurl').value;
+            let token = document.getElementById('token').value;
+
+            // 调用函数开始下载和保存文件的过程
+            downloadAndSaveFiles(repoUrl, token).then(() => {
+                console.log("Files are successfully saved to IndexedDB.");
+            }).catch(error => {
+                console.error("Error saving files to IndexedDB:", error);
+            });
+}
+
+function saveFileToIndexedDB(filepath, content) {
+    return new Promise((resolve, reject) => {
+        getIndexedDB().then(db => {
+            var transaction = db.transaction(["files"], "readwrite");
+            var store = transaction.objectStore("files");
+            var request = store.put(content, filepath);
+
+            request.onsuccess = function(event) {
+                resolve();
+            };
+
+            request.onerror = function(event) {
+                reject("Error saving file: " + filepath);
+            };
+        });
+    });
+}
+
+// 函数：从 GitHub 下载文件并保存到 indexedDB
+async function downloadAndSaveFiles(url, token) {
+
+    // 假设您有一个函数来获取文件列表: getFilesList(url, token)
+    let filesList = await getFilesList(url, token);
+    let urlParts = new URL(url).pathname.split('/');
+    let root = urlParts[2];
+
+    for (let file of filesList) {
+        // 下载文件内容
+        let content = await fetchFileContent(url, file, token);
+
+        // 保存到 indexedDB
+        let filepath = root + '/' + file;
+        await saveFileToIndexedDB(filepath, content);
+    }
+}
+
+async function getFilesList(repoUrl, token, path = '') {
+    // 解析仓库的用户名和仓库名
+    let urlParts = new URL(repoUrl).pathname.split('/');
+    let user = urlParts[1];
+    let repo = urlParts[2];
+
+    // 构建 GitHub API 请求 URL
+    let apiUrl = `https://api.github.com/repos/${user}/${repo}/contents/${path}`;
+
+    // 发送请求
+    let response = await fetch(apiUrl, {
+        headers: { 'Authorization': 'token ' + token }
+    });
+    if (!response.ok) {
+        throw new Error('Network response was not ok ' + response.statusText);
+    }
+    let fileList = await response.json();
+
+    // 递归获取所有文件和目录
+    let files = [];
+    for (let file of fileList) {
+        if (file.type === 'dir') {
+            // 递归获取目录下的文件
+            let subFiles = await getFilesList(repoUrl, token, file.path);
+            files.push(...subFiles);
+        } else {
+            // 添加文件到列表
+            files.push(file.path);
+        }
+    }
+
+    return files;
+}
+
+async function fetchFileContent(repoUrl, filePath, token) {
+    // 解析仓库的用户名和仓库名
+    let urlParts = new URL(repoUrl).pathname.split('/');
+    let user = urlParts[1];
+    let repo = urlParts[2];
+
+    // 构建 GitHub API 请求 URL
+    let apiUrl = `https://api.github.com/repos/${user}/${repo}/contents/${filePath}`;
+
+    // 发送请求
+    let response = await fetch(apiUrl, {
+        headers: { 'Authorization': 'token ' + token }
+    });
+    if (!response.ok) {
+        throw new Error('Network response was not ok ' + response.statusText);
+    }
+    let fileData = await response.json();
+
+    // 解码 Base64 内容
+
+    return fileData.content;
 }
 </script>
 

@@ -13,4 +13,49 @@ const go = new Go();
 WebAssembly.instantiateStreaming(fetch("main.wasm"), go.importObject).then(result => {
     go.run(result.instance);
 });
+
+function readDataFromIndexedDB(key) {
+    console.log("Calling readDataFromIndexedDB with key:", key);
+    return new Promise((resolve, reject) => {
+        // IndexedDB 访问逻辑
+        getIndexedDB().then(db => {
+            let transaction = db.transaction(["files"], "readonly");
+            let store = transaction.objectStore("files");
+            let request = store.get(key);
+
+            request.onsuccess = function() {
+                resolve(request.result);
+            };
+
+            request.onerror = function() {
+                reject("Error reading data");
+            };
+        });
+    });
+}
+
+function getIndexedDB() {
+            var request = window.indexedDB.open("SPXDatabase", 1);
+
+            request.onupgradeneeded = function(event) {
+                var db = event.target.result;
+                if (!db.objectStoreNames.contains("files")) {
+                    db.createObjectStore("files");
+                }
+            };
+
+            return new Promise((resolve, reject) => {
+                request.onerror = function(event) {
+                    reject("Error opening indexedDB: " + event.target.errorCode);
+                };
+
+                request.onsuccess = function(event) {
+                    resolve(event.target.result);
+                };
+            });
+}
+
+function testFunction() {
+    console.log("Test function called");
+}
 </script>
